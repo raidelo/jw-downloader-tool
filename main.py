@@ -14,12 +14,14 @@ from parsing import parse_spec_to_ranges, expand_ranges
 BASE_URL = "https://www.jw.org/es/biblioteca/libros/disfrute-vida-para-siempre/seccion-%s/multimedia/"
 LESSON_NUMBER_RE = re.compile(r"^(\d{1,2})\s+.*")
 SIZE_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)(b|k|m|g|B|K|M|G)?")
+DURATION_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)(s|m|h|S|M|H)?")
 
 
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--quality", default="720", dest="quality")
     parser.add_argument("-l", "--size-limit", default=-1, dest="size_limit")
+    parser.add_argument("-d", "--duration-limit", default=-1, dest="duration_limit")
 
     subcmd = parser.add_subparsers(required=True)
     subcommand_section = subcmd.add_parser("section")
@@ -63,7 +65,9 @@ class JWDownloader:
         "e": "e",
     }
 
-    def __init__(self, quality: str | int = 720, max_file_size: int = -1):
+    def __init__(
+        self, quality: str | int = 720, max_file_size: int = -1, max_duration: int = -1
+    ):
         if isinstance(quality, int):
             self.quality = quality
         elif isinstance(quality, str):
@@ -79,6 +83,7 @@ class JWDownloader:
         if not isinstance(max_file_size, int):
             raise TypeError("Argument `max_file_size` must be an `int`")
         self.max_file_size = max_file_size
+        self.max_duration = max_duration
 
         self.queue = OrderedDict()
         for i in range(1, 5):
@@ -164,6 +169,7 @@ class JWDownloader:
                             title = best_quality_variant["title"]
                             url = best_quality_variant["file"]["url"]
                             filesize = best_quality_variant["filesize"]
+                            duration = best_quality_variant["duration"]
 
                             if not best_quality_variant:
                                 print("\nVídeo no encontrado para:")
@@ -176,6 +182,11 @@ class JWDownloader:
                             ):
                                 print(
                                     "\nIgnorando vídeo. Su tamaño excede el máximo permitido."
+                                )
+                                continue
+                            if self.max_duration != -1 and duration > self.max_duration:
+                                print(
+                                    "\nIgnorando vídeo. Su duración excede el máximo permitido."
                                 )
                                 continue
 
@@ -311,6 +322,24 @@ def parse_size_limit(size: str) -> int:
         raise ValueError("Incorrect format for size limit")
 
 
+def parse_duration_limit(size: str) -> int:
+    match = DURATION_LIMIT_RE.match(size)
+    multipliers = {
+        "s": 60**0,
+        "m": 60**1,
+        "h": 60**2,
+        "S": 60**0,
+        "M": 60**1,
+        "H": 60**2,
+    }
+    if match:
+        ammount = match.group(1)
+        multiplier = match.group(3)
+        return int(float(ammount) * (multipliers[multiplier] if multiplier else 1))
+    else:
+        raise ValueError("Incorrect format for duration limit")
+
+
 def main():
     parser, args = parse_args()
     if args.size_limit != -1:
@@ -318,6 +347,12 @@ def main():
             args.size_limit = parse_size_limit(args.size_limit)
         except ValueError:
             print(f"error: Incorrect format for size limit: {args.size_limit}")
+            exit(1)
+    if args.duration_limit != -1:
+        try:
+            args.duration_limit = parse_duration_limit(args.duration_limit)
+        except ValueError:
+            print(f"error: Incorrect format for duration limit: {args.duration_limit}")
             exit(1)
 
     jw_downloader = JWDownloader(
