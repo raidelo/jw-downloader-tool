@@ -10,18 +10,18 @@ Endpoint = Optional[Tuple[int, str]]  # (numero, sufijo) o None (abierto)
 Range = Tuple[Endpoint, Endpoint]
 
 # sufijos válidos
-VALID_SUFFIXES = {"a", "l", "d"}
-DEFAULT_SUFFIX = "a"
+VALID_SUFFIXES = {"a", "m", "e"}
+DEFAULT_SUFFIX = "m"
 
-# regex: numero + sufijo opcional (1 letra de a/l/d)
-TOKEN_RE = re.compile(r"^(\d+)([ald]?)$")
+# regex: numero + sufijo opcional (1 letra de a/m/e)
+TOKEN_RE = re.compile(r"^(\d+)([ame]?)$")
 
 
 # ----------------------------
 # Parseo
 # ----------------------------
 def parse_token(token: str) -> Tuple[int, str]:
-    """Convierte un token como '5a', '21l', '15' en (numero, sufijo)."""
+    """Convierte un token como '5a', '21m', '15' en (numero, sufijo)."""
     m = TOKEN_RE.match(token)
     if not m:
         raise ValueError(f"Token inválido: '{token}'")
@@ -34,10 +34,10 @@ def parse_token(token: str) -> Tuple[int, str]:
 
 def parse_spec_to_ranges(spec: str) -> List[Range]:
     """
-    Parsea un spec estilo nmap pero con sufijos opcionales [a,l,d].
+    Parsea un spec estilo nmap pero con sufijos opcionales [a,m,e].
     Ejemplos:
-      '5a,7-9d,15,21-l' ->
-      [((5,'a'),(5,'a')), ((7,'a'),(9,'d')), ((15,'a'),(15,'a')), ((21,'a'), None)]
+      '5a,7-9e,15,21m-' ->
+      [((5,'a'),(5,'a')), ((7,'a'),(9,'e')), ((15,'a'),(15,'a')), ((21,'m'), None)]
     """
     if spec is None:
         return []
@@ -136,9 +136,9 @@ def compress_ranges(ranges: List[Range]) -> str:
 # ----------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="Parseador estilo nmap con sufijos [a,l,d]."
+        description="Parseador estilo nmap con sufijos [a,m,e]."
     )
-    parser.add_argument("spec", help='Ejemplo: "5a,7-9d,15,21l-"')
+    parser.add_argument("spec", help='Ejemplo: "5a,7-9e,15,21m-"')
     parser.add_argument(
         "--min",
         type=int,
