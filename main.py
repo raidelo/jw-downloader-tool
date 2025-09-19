@@ -66,7 +66,7 @@ class JWDownloader:
     }
 
     def __init__(
-        self, quality: str | int = 720, max_file_size: int = -1, max_duration: int = -1
+        self, quality: str | int = 720, max_size: int = -1, max_duration: int = -1
     ):
         if isinstance(quality, int):
             self.quality = quality
@@ -80,9 +80,9 @@ class JWDownloader:
         else:
             raise TypeError("Argument `quality` must be either an `int` or a `str`")
 
-        if not isinstance(max_file_size, int):
+        if not isinstance(max_size, int):
             raise TypeError("Argument `max_file_size` must be an `int`")
-        self.max_file_size = max_file_size
+        self.max_size = max_size
         self.max_duration = max_duration
 
         self.queue = OrderedDict()
@@ -176,10 +176,7 @@ class JWDownloader:
                                 print(f"  Título: {title}")
                                 print(f"  Url: {url}")
                                 continue
-                            if (
-                                self.max_file_size != -1
-                                and filesize > self.max_file_size
-                            ):
+                            if self.max_size != -1 and filesize > self.max_size:
                                 print(
                                     "\nIgnorando vídeo. Su tamaño excede el máximo permitido."
                                 )
@@ -355,9 +352,7 @@ def main():
             print(f"error: Incorrect format for duration limit: {args.duration_limit}")
             exit(1)
 
-    jw_downloader = JWDownloader(
-        quality=args.quality, max_file_size=args.size_limit or -1
-    )
+    jw_downloader = JWDownloader(quality=args.quality, max_size=args.size_limit or -1)
 
     if hasattr(args, "section"):
         try:
