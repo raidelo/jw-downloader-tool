@@ -1,4 +1,4 @@
-from src.constants import SIZE_LIMIT_RE, DURATION_LIMIT_RE
+from constants import SIZE_LIMIT_RE, DURATION_LIMIT_RE
 
 
 def rm_wrong_chars(s: str) -> str:

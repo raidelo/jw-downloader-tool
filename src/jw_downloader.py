@@ -4,18 +4,12 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
 
-from src.constants import BASE_URL, LESSON_NUMBER_RE
-from src.errors import InvalidContentType, InvalidSection, InvalidLesson
-from src.functions import rm_wrong_chars
+from constants import BASE_URL, LESSON_NUMBER_RE, SECTIONS
+from errors import InvalidContentType, InvalidSection, InvalidLesson
+from functions import rm_wrong_chars
 
 
 class JWDownloader:
-    SECTIONS = (
-        (0, 12),
-        (13, 33),
-        (34, 47),
-        (48, 60),
-    )
     CONTENT = {
         "all": "a",
         "main": "m",
@@ -55,7 +49,7 @@ class JWDownloader:
                 raise InvalidSection(section)
             if content_type not in self.CONTENT.keys():
                 raise InvalidContentType(content_type)
-            first_lesson, last_lesson = self.SECTIONS[section - 1]
+            first_lesson, last_lesson = SECTIONS[section]
             self.queue[section] = [
                 (lesson, self.CONTENT[content_type])
                 for lesson in range(first_lesson, last_lesson + 1)
@@ -67,7 +61,7 @@ class JWDownloader:
                 raise InvalidLesson(lesson)
             if content_type not in self.CONTENT.keys():
                 raise InvalidContentType(content_type)
-            for section, range_ in enumerate(self.SECTIONS, 1):
+            for section, range_ in SECTIONS.items():
                 if lesson >= range_[0] and lesson <= range_[1]:
                     self.queue[section].append((lesson, content_type))
 
@@ -128,20 +122,26 @@ class JWDownloader:
                             )
                             title = best_quality_variant["title"]
                             url = best_quality_variant["file"]["url"]
-                            filesize = best_quality_variant["filesize"]
-                            duration = best_quality_variant["duration"]
+                            p = Path(url.split("?")[0])
+                            filename = rm_wrong_chars(p.name.replace(p.stem, title))
 
                             if not best_quality_variant:
                                 print("\nVídeo no encontrado para:")
-                                print(f"  Título: {title}")
+                                print(f"  Título: {filename}")
                                 print(f"  Url: {url}")
                                 continue
-                            if self.max_size != -1 and filesize > self.max_size:
+                            if (
+                                self.max_size != -1
+                                and best_quality_variant["filesize"] > self.max_size
+                            ):
                                 print(
                                     "\nIgnorando vídeo. Su tamaño excede el máximo permitido."
                                 )
                                 continue
-                            if self.max_duration != -1 and duration > self.max_duration:
+                            if (
+                                self.max_duration != -1
+                                and best_quality_variant["duration"] > self.max_duration
+                            ):
                                 print(
                                     "\nIgnorando vídeo. Su duración excede el máximo permitido."
                                 )
@@ -152,13 +152,10 @@ class JWDownloader:
                                 print(f"Ruta: {path}")
                                 print(f"Url: {url}")
                                 print(f"Qual: {best_quality_variant['label']}")
-                                print(f"Filesize: {filesize}")
                                 print("Archivo descargado con éxito!\n")
 
                             if key == "main":
-                                descargar_archivo(
-                                    url, lesson_path.joinpath(rm_wrong_chars(title))
-                                )
+                                descargar_archivo(url, lesson_path.joinpath(filename))
                             else:
                                 extra_lesson_path = lesson_path.joinpath(
                                     "Descubra algo más"
@@ -166,7 +163,7 @@ class JWDownloader:
                                 extra_lesson_path.mkdir(parents=True, exist_ok=True)
                                 descargar_archivo(
                                     url,
-                                    extra_lesson_path.joinpath(rm_wrong_chars(title)),
+                                    extra_lesson_path.joinpath(filename),
                                 )
 
                     except KeyError:

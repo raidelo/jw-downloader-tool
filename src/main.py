@@ -4,6 +4,7 @@ from parsing import parse_spec_to_ranges, expand_ranges
 from functions import parse_size_limit, parse_duration_limit
 from jw_downloader import JWDownloader
 from cli import parse_args
+from constants import SECTION_ALL_RE, DEFAULT_TO_DOWNLOAD
 
 
 def main():
@@ -21,17 +22,16 @@ def main():
             print(f"error: Incorrect format for duration limit: {args.duration_limit}")
             exit(1)
 
-    jw_downloader = JWDownloader(quality=args.quality, max_size=args.size_limit or -1)
+    jw_downloader = JWDownloader(
+        quality=args.quality, max_size=args.size_limit, max_duration=args.duration_limit
+    )
 
     if hasattr(args, "section"):
         try:
-            if args.section == "all":
-                for i in [";", "|", "."]:
-                    content_type = "main"
-                    splitted = args.section.split(i, 1)
-                    if len(splitted) > 1:
-                        content_type = splitted[1]
-                sections = [(section, content_type) for section in range(1, 5)]
+            match = SECTION_ALL_RE.match(args.section)
+            if match:
+                content_to_download = match.group(2) or DEFAULT_TO_DOWNLOAD
+                sections = [(section, content_to_download) for section in range(1, 5)]
             else:
                 sections = list(
                     expand_ranges(
