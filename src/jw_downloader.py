@@ -300,11 +300,16 @@ class JWDownloader:
                             f"Descargando {video_title}", total=size
                         )
 
+                        written = 0
+
                         if part == "main":
                             for bytes_written in download_archive(
                                 video_url, lesson_path.joinpath(filename)
                             ):
                                 progress.update(task, advance=bytes_written)
+                                written += bytes_written
+                                if written == size:
+                                    break
 
                         else:
                             extra_lesson_path = lesson_path.joinpath(
@@ -315,6 +320,9 @@ class JWDownloader:
                                 video_url, extra_lesson_path.joinpath(filename)
                             ):
                                 progress.update(task, advance=bytes_written)
+                                written += bytes_written
+                                if written == size:
+                                    break
 
                         progress.remove_task(task)
                         completed.append(video_title)

@@ -2,7 +2,9 @@ from requests import get
 from pathlib import Path
 
 
-def download_archive(url, path: Path | None = None, resume: bool = True):
+def download_archive(
+    url, path: Path | None = None, resume: bool = True, supposed_size: int = None
+):
     """
     Descarga un archivo desde una URL con capacidad de reanudar la rescarga
     """
@@ -20,7 +22,8 @@ def download_archive(url, path: Path | None = None, resume: bool = True):
         written = path.stat().st_size
         if written != 0:
             open_mode = "ab"
-            headers = {"Range": f"bytes={written + 1}-"}
+            headers = {"Range": f"bytes={written}-"}
+            yield written
 
     with open(path, open_mode) as f:
         chunk = 4096  # tamaño del bloque de descarga
