@@ -1,36 +1,32 @@
-import requests
-import sys
+from requests import get
 from pathlib import Path
 
 
-def descargar_archivo(url, nombre_archivo=None):
+def descargar_archivo(url, path: Path | None = None, resume: bool = True):
     """
-    Descarga un archivo desde una URL mostrando una barra de progreso animada.
+    Descarga un archivo desde una URL con capacidad de reanudar la rescarga
     """
 
     # Si no se pasa nombre, lo toma del final de la URL
-    if nombre_archivo is None:
-        nombre_archivo = Path(url.split("?")[0]).name or "archivo_descargado"
+    if path is None:
+        filename = Path(url.split("?")[0]).name or "archivo_descargado"
+        path = Path().joinpath(filename)
 
-    # Hace la petición HTTP con streaming
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        total = int(r.headers.get("content-length", 0))
-        descargado = 0
-        bloque = 8192  # tamaño del bloque de descarga
+    headers = {}
+    written = 0
+    open_mode = "wb"
 
-        with open(nombre_archivo, "wb") as f:
-            for chunk in r.iter_content(chunk_size=bloque):
+    if resume and path.exists():
+        written = path.stat().st_size
+        if written != 0:
+            open_mode = "ab"
+            headers = {"Range": f"bytes={written + 1}-"}
+
+    with open(path, open_mode) as f:
+        chunk = 4096  # tamaño del bloque de descarga
+
+        with get(url, stream=True, headers=headers) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=chunk):
                 if chunk:
-                    f.write(chunk)
-                    descargado += len(chunk)
-
-                    # Calcula el progreso
-                    if total > 0:
-                        porcentaje = descargado / total
-                        barra = "#" * int(porcentaje * 40)
-                        espacios = " " * (40 - len(barra))
-                        sys.stdout.write(
-                            f"\rDescargando: [{barra}{espacios}] {porcentaje:.1%}"
-                        )
-                        sys.stdout.flush()
+                    yield f.write(chunk)
