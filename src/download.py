@@ -2,7 +2,7 @@ from requests import get
 from pathlib import Path
 
 
-def descargar_archivo(url, path: Path | None = None, resume: bool = True):
+def download_archive(url, path: Path | None = None, resume: bool = True):
     """
     Descarga un archivo desde una URL con capacidad de reanudar la rescarga
     """

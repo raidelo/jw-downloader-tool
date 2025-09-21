@@ -16,6 +16,7 @@ from rich.table import Table
 from constants import BASE_URL, LESSON_NUMBER_RE, SECTIONS
 from errors import InvalidContentType, InvalidSection, InvalidLesson
 from functions import rm_wrong_chars
+from download import download_archive
 
 
 class JWDownloader:
@@ -300,7 +301,7 @@ class JWDownloader:
                         )
 
                         if part == "main":
-                            for bytes_written in self.descargar_archivo(
+                            for bytes_written in download_archive(
                                 video_url, lesson_path.joinpath(filename)
                             ):
                                 progress.update(task, advance=bytes_written)
@@ -310,7 +311,7 @@ class JWDownloader:
                                 "Descubra algo más"
                             )
                             extra_lesson_path.mkdir(parents=True, exist_ok=True)
-                            for bytes_written in self.descargar_archivo(
+                            for bytes_written in download_archive(
                                 video_url, extra_lesson_path.joinpath(filename)
                             ):
                                 progress.update(task, advance=bytes_written)
