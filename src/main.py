@@ -1,3 +1,5 @@
+from signal import signal, SIGINT, SIGTERM
+
 from rich.table import Table
 
 from cli import parse_args
@@ -6,6 +8,11 @@ from console import console
 from functions import parse_size_limit, parse_duration_limit
 from jw_downloader import JWDownloader
 from parsing import parse_spec_to_ranges, expand_ranges
+from signal_handler import signal_handler
+
+
+signal(SIGINT, signal_handler)
+signal(SIGTERM, signal_handler)
 
 
 def main():
