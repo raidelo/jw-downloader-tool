@@ -3,7 +3,6 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 import requests
-from rich.console import Console
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -14,8 +13,9 @@ from rich.progress import (
 from rich.table import Table
 
 from constants import BASE_URL, LESSON_NUMBER_RE, SECTIONS
+from console import console, Console
 from errors import InvalidContentType, InvalidSection, InvalidLesson
-from functions import rm_wrong_chars
+from functions import mkdirs, rm_wrong_chars
 from download import download_archive
 
 
@@ -49,13 +49,11 @@ class JWDownloader:
         self.max_size = max_size
         self.max_duration = max_duration
 
-        self.queue: dict[int, list[dict[str, str]]] = OrderedDict()
+        self.queue = OrderedDict()
         for i in range(1, 5):
             self.queue[i] = []
 
-        self.console = Console()
-
-    def add_sections_to_queue(self, sections: list[int]):
+    def add_sections_to_queue(self, sections: list[tuple[int, str]]):
         for section, content_type in sections:
             if section < 1 or section > 4:
                 raise InvalidSection(section)
@@ -67,7 +65,7 @@ class JWDownloader:
                 for lesson in range(first_lesson, last_lesson + 1)
             ]
 
-    def add_lessons_to_queue(self, lessons: list[int]):
+    def add_lessons_to_queue(self, lessons: list[tuple[int, str]]):
         for lesson, content_type in lessons:
             if lesson < 0 or lesson > 60:
                 raise InvalidLesson(lesson)
@@ -79,15 +77,14 @@ class JWDownloader:
 
     def exec(self):
         for section in self.queue:
-            self.queue[section].sort()
-
-        for section in self.queue:
             if self.queue[section]:
+                self.queue[section].sort()
+
                 section_info = self.__get_info_of_section(section)
                 new_section_queue = []
 
-                for lesson, content_type in self.queue[section]:
-                    lesson_info = section_info[lesson]
+                for lesson_id, content_type in self.queue[section]:
+                    lesson_info = section_info[lesson_id]
 
                     if content_type in ["all", "a"]:
                         pass
@@ -100,11 +97,129 @@ class JWDownloader:
 
                 self.queue[section] = new_section_queue
 
-    def start_download(self):
-        self.download_all()
+    def start_download(self, console: Console):
+        completed = []
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            TextColumn("[green]{task.completed}/{task.total}"),
+            TimeRemainingColumn(),
+            console=console,
+            transient=True,  # limpia al terminar
+        ) as progress:
+            self.__show_summary()
+
+            root_path = mkdirs(Path().joinpath("Disfrute de la vida para siempre!"))
+
+            for sec, lessons in self.queue.items():
+                if not lessons:
+                    continue
+
+                console.print(f"\n[bold yellow]\u25b6 Sección {sec}[/bold yellow]")
+
+                section_path = mkdirs(root_path.joinpath(f"Sección {sec}"))
+
+                for lesson_props in lessons:
+                    lesson_title = lesson_props["title"]
+
+                    console.print(f"  [cyan]Lección {lesson_title}[/cyan]")
+
+                    lesson_path = mkdirs(
+                        section_path.joinpath(rm_wrong_chars(lesson_title))
+                    )
+
+                    videos: list[tuple[str, str]] = []
+
+                    try:
+                        videos += list(
+                            map(lambda link: ("main", link), lesson_props["main"])
+                        )
+                    except KeyError:
+                        pass
+                    try:
+                        videos += list(
+                            map(lambda link: ("extra", link), lesson_props["extra"])
+                        )
+                    except KeyError:
+                        pass
+
+                    for part, api_link in videos:
+                        try:
+                            properties = self.get_video_properties_from_api(api_link)
+                        except requests.JSONDecodeError:
+                            console.print(
+                                "error: The remote server responded with an invalid response"
+                            )
+                            continue
+                        try:
+                            properties = properties["files"]["S"]["MP4"]
+                        except KeyError:
+                            console.print("error: Couldn't find the link for the video")
+                            continue
+
+                        best_quality = self.get_best_quality_from(
+                            properties, self.quality
+                        )
+                        if not best_quality:
+                            console.print(
+                                "Couldn't find the desired quality for the video"
+                            )
+                            continue
+
+                        size = best_quality["filesize"]
+                        video_title = best_quality["title"]
+                        video_url = best_quality["file"]["url"]
+
+                        if self.max_size != -1 and size > self.max_size:
+                            console.print(
+                                f'[bold gray]Ignorando vídeo: "{video_title}" Su tamaño excede el máximo permitido.[/]'
+                            )
+                            continue
+                        if (
+                            self.max_duration != -1
+                            and best_quality["duration"] > self.max_duration
+                        ):
+                            console.print(
+                                f'[bold gray]Ignorando vídeo: "{video_title}" Su duración excede el máximo permitido.[/]'
+                            )
+                            continue
+
+                        filename = rm_wrong_chars(
+                            video_title
+                            + "".join(Path(video_url.split("?")[0]).suffixes)
+                        )
+
+                        task = progress.add_task(
+                            f"Descargando: {video_title}", total=size
+                        )
+
+                        written = 0
+
+                        if part == "extra":
+                            file_path = lesson_path.joinpath(filename)
+                        else:
+                            file_path = mkdirs(
+                                lesson_path.joinpath("Descubra algo más")
+                            ).joinpath(filename)
+
+                        for bytes_written in download_archive(video_url, file_path):
+                            progress.update(task, advance=bytes_written)
+                            written += bytes_written
+                            if written == size:
+                                break
+
+                        progress.remove_task(task)
+                        completed.append(video_title)
+                        console.print(
+                            f"    [bold green]✔ {video_title}[/bold] descargado[/green]"
+                        )
+
+        return completed
 
     @staticmethod
-    def get_best_quality_from(properties: dict, quality: int) -> dict:
+    def get_best_quality_from(properties: dict, quality: int) -> dict | None:
         best_match, index_of_best_match = 0, None
         for variant_pos, variant in enumerate(properties):
             curr_quality = int(variant["label"].strip("pP "))
@@ -114,6 +229,7 @@ class JWDownloader:
                 best_match, index_of_best_match = curr_quality, variant_pos
         if index_of_best_match:
             return properties[index_of_best_match]
+        return None
 
     @classmethod
     def __get_info_of_section(cls, section: int) -> OrderedDict:
@@ -167,7 +283,7 @@ class JWDownloader:
 
     @staticmethod
     def get_video_properties_from_api(api_link: str) -> dict:
-        return requests.get(api_link).json()["files"]["S"]["MP4"]
+        return requests.get(api_link).json()
 
     @staticmethod
     def __get_video_link(tag):
@@ -183,11 +299,6 @@ class JWDownloader:
         except ValueError:
             contains_class = False
         return tag.name == "h3" and contains_class
-
-    def __print_header(self):
-        self.console.print(
-            "\n[bold cyan]JW-Downloader - CLI[/bold cyan]\n", justify="center"
-        )
 
     def __show_summary(self):
         table = Table(title="Resumen de descargas")
@@ -209,134 +320,4 @@ class JWDownloader:
             )
             table.add_row(str(sec), lessons_str)
 
-        self.console.print(table)
-
-    def download_all(self):
-        self.__print_header()
-        self.__show_summary()
-
-        completed = []
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(bar_width=None),
-            TextColumn("[green]{task.completed}/{task.total}"),
-            TimeRemainingColumn(),
-            console=self.console,
-            transient=True,  # limpia al terminar
-        ) as progress:
-            root_path = Path(__file__).with_name("Disfrute de la vida para siempre!")
-            root_path.mkdir(parents=True, exist_ok=True)
-
-            for sec, lessons in self.queue.items():
-                if not lessons:
-                    continue
-
-                self.console.print(f"\n[bold yellow]\u25b6 Sección {sec}[/bold yellow]")
-
-                section_path = root_path.joinpath(f"Sección {sec}")
-                section_path.mkdir(parents=True, exist_ok=True)
-
-                for lesson_dict in lessons:
-                    self.console.print(f"  [cyan]Lección {lesson_dict['title']}[/cyan]")
-
-                    lesson_path = section_path.joinpath(
-                        rm_wrong_chars(lesson_dict["title"])
-                    )
-                    lesson_path.mkdir(parents=True, exist_ok=True)
-
-                    videos: list[tuple[str, str]] = []
-                    try:
-                        videos += list(
-                            map(lambda link: ("main", link), lesson_dict["main"])
-                        )
-                    except KeyError:
-                        pass
-                    try:
-                        videos += list(
-                            map(lambda link: ("extra", link), lesson_dict["extra"])
-                        )
-                    except KeyError:
-                        pass
-
-                    for part, api_link in videos:
-                        properties = self.get_video_properties_from_api(api_link)
-                        best_quality = self.get_best_quality_from(
-                            properties, self.quality
-                        )
-
-                        if not best_quality:
-                            self.console.print(
-                                f"\nVídeo no encontrado para:\n{properties}"
-                            )
-                            continue
-
-                        size = best_quality["filesize"]
-
-                        if self.max_size != -1 and size > self.max_size:
-                            self.console.print(
-                                "\nIgnorando vídeo. Su tamaño excede el máximo permitido."
-                            )
-                            continue
-                        if (
-                            self.max_duration != -1
-                            and best_quality["duration"] > self.max_duration
-                        ):
-                            self.console.print(
-                                "\nIgnorando vídeo. Su duración excede el máximo permitido."
-                            )
-                            continue
-
-                        video_title = best_quality["title"]
-                        video_url = best_quality["file"]["url"]
-
-                        filename = rm_wrong_chars(
-                            video_title
-                            + "".join(Path(video_url.split("?")[0]).suffixes)
-                        )
-
-                        task = progress.add_task(
-                            f"Descargando {video_title}", total=size
-                        )
-
-                        written = 0
-
-                        if part == "main":
-                            for bytes_written in download_archive(
-                                video_url, lesson_path.joinpath(filename)
-                            ):
-                                progress.update(task, advance=bytes_written)
-                                written += bytes_written
-                                if written == size:
-                                    break
-
-                        else:
-                            extra_lesson_path = lesson_path.joinpath(
-                                "Descubra algo más"
-                            )
-                            extra_lesson_path.mkdir(parents=True, exist_ok=True)
-                            for bytes_written in download_archive(
-                                video_url, extra_lesson_path.joinpath(filename)
-                            ):
-                                progress.update(task, advance=bytes_written)
-                                written += bytes_written
-                                if written == size:
-                                    break
-
-                        progress.remove_task(task)
-                        completed.append(video_title)
-                        self.console.print(
-                            f"    [green]✔ {video_title} descargado[/green]"
-                        )
-
-        self.console.print(
-            "\n[bold green]✅ Todas las descargas completadas[/bold green]\n"
-        )
-
-        # Mostrar lista de completados
-        table = Table(title="Videos descargados", show_lines=True)
-        table.add_column("Video", style="cyan")
-        for v in completed:
-            table.add_row(v)
-        self.console.print(table)
+        console.print(table)

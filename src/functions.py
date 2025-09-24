@@ -1,4 +1,10 @@
 from constants import SIZE_LIMIT_RE, DURATION_LIMIT_RE
+from pathlib import Path
+
+
+def mkdirs(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def rm_wrong_chars(s: str) -> str:
