@@ -2,7 +2,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-import requests
+from requests import JSONDecodeError
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -12,11 +12,12 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from constants import BASE_URL, LESSON_NUMBER_RE, SECTIONS
+from constants import SECTION_MULTIMEDIA_URL, LESSON_NUMBER_RE, SECTIONS
 from console import console, Console
+from download import download_archive
 from errors import InvalidContentType, InvalidSection, InvalidLesson
 from functions import mkdirs, rm_wrong_chars
-from download import download_archive
+from http_client_session import session
 
 
 class JWDownloader:
@@ -75,27 +76,35 @@ class JWDownloader:
                 if lesson >= range_[0] and lesson <= range_[1]:
                     self.queue[section].append((lesson, content_type))
 
-    def exec(self):
-        for section in self.queue:
-            if self.queue[section]:
-                self.queue[section].sort()
+    def exec(self, console: Console):
+        with Progress(console=console) as progress:
+            for section in self.queue:
+                if self.queue[section]:
+                    task = progress.add_task(
+                        f"[bold yellow]Getting information for Section {section}",
+                        total=None,
+                    )
 
-                section_info = self.__get_info_of_section(section)
-                new_section_queue = []
+                    self.queue[section].sort()
 
-                for lesson_id, content_type in self.queue[section]:
-                    lesson_info = section_info[lesson_id]
+                    section_info = self.__get_info_of_section(section)
+                    new_section_queue = []
 
-                    if content_type in ["all", "a"]:
-                        pass
-                    elif content_type in ["main", "m"]:
-                        lesson_info.pop("extra")
-                    elif content_type in ["extra", "e"]:
-                        lesson_info.pop("main")
+                    for lesson_id, content_type in self.queue[section]:
+                        lesson_info = section_info[lesson_id]
 
-                    new_section_queue.append(lesson_info)
+                        if content_type in ["all", "a"]:
+                            pass
+                        elif content_type in ["main", "m"]:
+                            lesson_info.pop("extra")
+                        elif content_type in ["extra", "e"]:
+                            lesson_info.pop("main")
 
-                self.queue[section] = new_section_queue
+                        new_section_queue.append(lesson_info)
+
+                    self.queue[section] = new_section_queue
+
+                    progress.remove_task(task)
 
     def start_download(self, console: Console):
         completed = []
@@ -148,7 +157,7 @@ class JWDownloader:
                     for part, api_link in videos:
                         try:
                             properties = self.get_video_properties_from_api(api_link)
-                        except requests.JSONDecodeError:
+                        except JSONDecodeError:
                             console.print(
                                 "error: The remote server responded with an invalid response"
                             )
@@ -232,15 +241,17 @@ class JWDownloader:
         return None
 
     @classmethod
-    def __get_info_of_section(cls, section: int) -> OrderedDict:
-        r = requests.get(BASE_URL % section)
+    def __get_info_of_section(
+        cls, section: int
+    ) -> OrderedDict[int, dict[str, str | list[str]]]:
+        r = session.get(SECTION_MULTIMEDIA_URL % section, stream=True)
         soup = BeautifulSoup(r.content, "html.parser")
 
         main_content = soup.find("main", {"id": "content"})
         nav_bar = main_content.find("div", {"id": "tt3"})
         siblings = nav_bar.find_next_siblings()
 
-        summary, current_lesson_title = OrderedDict(), ""
+        section_summary, current_lesson_title = OrderedDict(), ""
         in_lessons_main, in_lessons_extra = False, False
 
         for sibling in siblings:
@@ -250,7 +261,7 @@ class JWDownloader:
                 current_lesson_number = cls.__get_lesson_number_from_title(
                     current_lesson_title
                 )
-                summary[current_lesson_number] = {
+                section_summary[current_lesson_number] = {
                     "title": current_lesson_title,
                     "main": [],
                     "extra": [],
@@ -264,14 +275,14 @@ class JWDownloader:
 
                 video_link = cls.__get_video_link(sibling)
                 if video_link:
-                    summary[current_lesson_number]["main"].append(video_link)
+                    section_summary[current_lesson_number]["main"].append(video_link)
 
             if in_lessons_extra:
                 video_link = cls.__get_video_link(sibling)
                 if video_link:
-                    summary[current_lesson_number]["extra"].append(video_link)
+                    section_summary[current_lesson_number]["extra"].append(video_link)
 
-        return summary
+        return section_summary
 
     @staticmethod
     def __get_lesson_number_from_title(title: str) -> int:
@@ -283,10 +294,10 @@ class JWDownloader:
 
     @staticmethod
     def get_video_properties_from_api(api_link: str) -> dict:
-        return requests.get(api_link).json()
+        return session.get(api_link).json()
 
     @staticmethod
-    def __get_video_link(tag):
+    def __get_video_link(tag) -> str | None:
         a = tag.find("a")
         if a is not None and a.text == "Descargar este video":
             return a.attrs["href"]

@@ -1,5 +1,6 @@
 from signal import signal, SIGINT, SIGTERM
 
+from rich.progress import Progress
 from rich.table import Table
 
 from cli import parse_args
@@ -63,9 +64,9 @@ def main():
         parser.print_help()
         exit(1)
 
-    jw_downloader.exec()
-
     console.print("\n[bold cyan]JW-Downloader - CLI[/bold cyan]\n", justify="center")
+
+    jw_downloader.exec(console)
 
     completed = jw_downloader.start_download(console)
 
