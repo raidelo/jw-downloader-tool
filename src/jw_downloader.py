@@ -12,23 +12,20 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from constants import SECTION_MULTIMEDIA_URL, LESSON_NUMBER_RE, SECTIONS
+from constants import SECTION_MULTIMEDIA_URL, LESSON_NUMBER_RE, SECTIONS, SUB_SECTIONS
 from console import console, Console
 from download import download_archive
-from errors import InvalidContentType, InvalidSection, InvalidLesson
+from errors import InvalidSubSection, InvalidSection, InvalidLesson
 from functions import mkdirs, rm_wrong_chars
 from http_client_session import session
 
+SectionID = int
+LessonID = int
+SubSection = str
+
+LessonInfo =dict[str, str | list[str]]
 
 class JWDownloader:
-    CONTENT = {
-        "all": "a",
-        "main": "m",
-        "extra": "e",
-        "a": "a",
-        "m": "m",
-        "e": "e",
-    }
 
     def __init__(
         self, quality: str | int = 720, max_size: int = -1, max_duration: int = -1
@@ -47,66 +44,74 @@ class JWDownloader:
 
         if not isinstance(max_size, int):
             raise TypeError("Argument `max_file_size` must be an `int`")
+
         self.max_size = max_size
         self.max_duration = max_duration
 
-        self.queue = OrderedDict()
+        self.queue: OrderedDict[SectionID, list[tuple[LessonID, SubSection]]] = OrderedDict()
         for i in range(1, 5):
             self.queue[i] = []
 
-    def add_sections_to_queue(self, sections: list[tuple[int, str]]):
-        for section, content_type in sections:
+        self.to_download_queue: OrderedDict[SectionID, OrderedDict[LessonID,LessonInfo]] = OrderedDict()
+
+    def add_sections_to_queue(self, sections: list[tuple[SectionID, SubSection]]):
+        for section, sub_section in sections:
             if section < 1 or section > 4:
                 raise InvalidSection(section)
-            if content_type not in self.CONTENT.keys():
-                raise InvalidContentType(content_type)
+            if sub_section not in SUB_SECTIONS:
+                raise InvalidSubSection(sub_section)
             first_lesson, last_lesson = SECTIONS[section]
             self.queue[section] = [
-                (lesson, self.CONTENT[content_type])
+                (lesson, SUB_SECTIONS[sub_section])
                 for lesson in range(first_lesson, last_lesson + 1)
             ]
 
-    def add_lessons_to_queue(self, lessons: list[tuple[int, str]]):
-        for lesson, content_type in lessons:
+    def add_lessons_to_queue(self, lessons: list[tuple[LessonID, SubSection]]):
+        for lesson, sub_section in lessons:
             if lesson < 0 or lesson > 60:
                 raise InvalidLesson(lesson)
-            if content_type not in self.CONTENT.keys():
-                raise InvalidContentType(content_type)
-            for section, range_ in SECTIONS.items():
-                if lesson >= range_[0] and lesson <= range_[1]:
-                    self.queue[section].append((lesson, content_type))
+            if sub_section not in SUB_SECTIONS:
+                raise InvalidSubSection(sub_section)
+            for section, (first_lesson, last_lesson) in SECTIONS.items():
+                if lesson >= first_lesson and lesson <= last_lesson:
+                    self.queue[section].append((lesson, sub_section))
+                    break
 
     def exec(self, console: Console):
         with Progress(console=console) as progress:
-            for section in self.queue:
-                if self.queue[section]:
-                    task = progress.add_task(
-                        f"[bold yellow]Getting information for Section {section}",
-                        total=None,
-                    )
+            for section, lessons in self.queue.items():
+                if not lessons:
+                    continue
 
-                    self.queue[section].sort()
+                task = progress.add_task(
+                    f"[bold yellow]Getting information for Section {section}",
+                    total=None,
+                )
 
-                    section_info = self.__get_info_of_section(section)
-                    new_section_queue = []
+                lessons.sort()
 
-                    for lesson_id, content_type in self.queue[section]:
-                        lesson_info = section_info[lesson_id]
+                section_info = self.__get_info_of_section(section)
+                new_section_queue = []
 
-                        if content_type in ["all", "a"]:
-                            pass
-                        elif content_type in ["main", "m"]:
-                            lesson_info.pop("extra")
-                        elif content_type in ["extra", "e"]:
-                            lesson_info.pop("main")
+                for lesson, sub_section in lessons:
+                    lesson_info = section_info[lesson]
 
-                        new_section_queue.append(lesson_info)
+                    if sub_section in ["all", "a"]:
+                        pass
+                    elif sub_section in ["main", "m"]:
+                        lesson_info.pop("extra")
+                    elif sub_section in ["extra", "e"]:
+                        lesson_info.pop("main")
 
-                    self.queue[section] = new_section_queue
+                    self.to_download_queue[section][lesson] = lesson_info
 
-                    progress.remove_task(task)
+                    new_section_queue.append(lesson_info)
 
-    def start_download(self, console: Console):
+                self.queue[section] = new_section_queue
+
+                progress.remove_task(task)
+
+    def start_download(self, console: Console) -> list[str]:
         completed = []
 
         with Progress(
@@ -122,16 +127,16 @@ class JWDownloader:
 
             root_path = mkdirs(Path().joinpath("Disfrute de la vida para siempre!"))
 
-            for sec, lessons in self.queue.items():
+            for section, lessons in self.to_download_queue.items():
                 if not lessons:
                     continue
 
-                console.print(f"\n[bold yellow]\u25b6 Sección {sec}[/bold yellow]")
+                console.print(f"\n[bold yellow]\u25b6 Sección {section}[/bold yellow]")
 
-                section_path = mkdirs(root_path.joinpath(f"Sección {sec}"))
+                section_path = mkdirs(root_path.joinpath(f"Sección {section}"))
 
-                for lesson_props in lessons:
-                    lesson_title = lesson_props["title"]
+                for _lesson, lesson_info in lessons.items():
+                    lesson_title = lesson_info["title"]
 
                     console.print(f"  [cyan]Lección {lesson_title}[/cyan]")
 
@@ -141,20 +146,15 @@ class JWDownloader:
 
                     videos: list[tuple[str, str]] = []
 
-                    try:
-                        videos += list(
-                            map(lambda link: ("main", link), lesson_props["main"])
-                        )
-                    except KeyError:
-                        pass
-                    try:
-                        videos += list(
-                            map(lambda link: ("extra", link), lesson_props["extra"])
-                        )
-                    except KeyError:
-                        pass
+                    subsection_main = lesson_info.get("main")
+                    if subsection_main:
+                        videos += [("main", api_link) for api_link in subsection_main]
 
-                    for part, api_link in videos:
+                    subsection_extra = lesson_info.get("extra")
+                    if subsection_extra:
+                        videos += [("extra", api_link) for api_link in subsection_extra]
+
+                    for subsection, api_link in videos:
                         try:
                             properties = self.get_video_properties_from_api(api_link)
                         except JSONDecodeError:
@@ -206,9 +206,9 @@ class JWDownloader:
 
                         written = 0
 
-                        if part == "extra":
+                        if subsection == "main":
                             file_path = lesson_path.joinpath(filename)
-                        else:
+                        else: # subsection == "extra"
                             file_path = mkdirs(
                                 lesson_path.joinpath("Descubra algo más")
                             ).joinpath(filename)
@@ -242,21 +242,22 @@ class JWDownloader:
 
     @classmethod
     def __get_info_of_section(
-        cls, section: int
-    ) -> OrderedDict[int, dict[str, str | list[str]]]:
-        r = session.get(SECTION_MULTIMEDIA_URL % section, stream=True)
+        cls, section: SectionID
+    ) -> OrderedDict[LessonID,LessonInfo]:
+        r = session.get(SECTION_MULTIMEDIA_URL % section)
         soup = BeautifulSoup(r.content, "html.parser")
 
         main_content = soup.find("main", {"id": "content"})
         nav_bar = main_content.find("div", {"id": "tt3"})
         siblings = nav_bar.find_next_siblings()
 
-        section_summary, current_lesson_title = OrderedDict(), ""
-        in_lessons_main, in_lessons_extra = False, False
+        section_summary: OrderedDict[LessonID,LessonInfo]  = OrderedDict()
+        current_lesson_title = ""
+        in_subsection_main, in_subsection_extra = False, False
 
         for sibling in siblings:
             if sibling.name == "h2":
-                in_lessons_main, in_lessons_extra = True, False
+                in_subsection_main, in_subsection_extra = True, False
                 current_lesson_title = sibling.text.strip()
                 current_lesson_number = cls.__get_lesson_number_from_title(
                     current_lesson_title
@@ -268,16 +269,16 @@ class JWDownloader:
                 }
                 continue
 
-            if in_lessons_main:
-                if cls.__is_extra(sibling):
-                    in_lessons_main, in_lessons_extra = False, True
+            if in_subsection_main:
+                if cls.__is_subsection_extra_header(sibling):
+                    in_subsection_main, in_subsection_extra = False, True
                     continue
 
                 video_link = cls.__get_video_link(sibling)
                 if video_link:
                     section_summary[current_lesson_number]["main"].append(video_link)
 
-            if in_lessons_extra:
+            if in_subsection_extra:
                 video_link = cls.__get_video_link(sibling)
                 if video_link:
                     section_summary[current_lesson_number]["extra"].append(video_link)
@@ -285,7 +286,7 @@ class JWDownloader:
         return section_summary
 
     @staticmethod
-    def __get_lesson_number_from_title(title: str) -> int:
+    def __get_lesson_number_from_title(title: str) -> LessonID:
         match = LESSON_NUMBER_RE.match(title)
         if match:
             return int(match.group(1))
@@ -303,7 +304,7 @@ class JWDownloader:
             return a.attrs["href"]
 
     @staticmethod
-    def __is_extra(tag) -> bool:
+    def __is_subsection_extra_header(tag) -> bool:
         try:
             tag.attrs["class"].index("du-color--coolGray-500")
             contains_class = True

@@ -1,6 +1,5 @@
 from signal import signal, SIGINT, SIGTERM
 
-from rich.progress import Progress
 from rich.table import Table
 
 from cli import parse_args
@@ -40,9 +39,9 @@ def main():
         try:
             match = SECTION_ALL_RE.match(args.section)
             if match:
-                content_to_download = match.group(2) or DEFAULT_TO_DOWNLOAD
+                sub_section = match.group(2) or DEFAULT_TO_DOWNLOAD
                 sections = [
-                    (section, content_to_download)
+                    (section, sub_section)
                     for section in range(1, AMMOUNT_OF_SECTIONS + 1)
                 ]
             else:
