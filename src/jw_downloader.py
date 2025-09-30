@@ -4,11 +4,13 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from requests import JSONDecodeError
 from rich.progress import (
+    BarColumn,
+    DownloadColumn,
     Progress,
     SpinnerColumn,
-    BarColumn,
     TextColumn,
     TimeRemainingColumn,
+    TransferSpeedColumn,
 )
 from rich.table import Table
 
@@ -126,6 +128,12 @@ class JWDownloader:
             TextColumn("[bold blue]{task.description}"),
             BarColumn(bar_width=None),
             TextColumn("[green]{task.completed}/{task.total}"),
+            "[progress.percentage]{task.percentage:>3.1f}%",
+            "•",
+            DownloadColumn(),
+            "•",
+            TransferSpeedColumn(),
+            "•",
             TimeRemainingColumn(),
             console=console,
             transient=True,
@@ -218,7 +226,9 @@ class JWDownloader:
                                 lesson_path.joinpath("Descubra algo más")
                             ).joinpath(filename)
 
-                        for bytes_written in download_archive(video_url, size, file_path):
+                        for bytes_written in download_archive(
+                            video_url, size, file_path
+                        ):
                             progress.update(task, advance=bytes_written)
                             written += bytes_written
                             if written == size:
