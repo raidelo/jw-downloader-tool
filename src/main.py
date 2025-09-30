@@ -1,7 +1,5 @@
 from signal import signal, SIGINT, SIGTERM
 
-from rich.table import Table
-
 from cli import parse_args
 from constants import SECTION_ALL_RE, DEFAULT_TO_DOWNLOAD, AMMOUNT_OF_SECTIONS
 from console import console
@@ -67,16 +65,15 @@ def main():
 
     jw_downloader.exec(console)
 
-    completed = jw_downloader.start_download(console)
+    summary_table = jw_downloader.summary_table()
+    console.print(summary_table)
+
+    jw_downloader.start_download(console)
 
     console.print("\n[bold green]✅ Todas las descargas completadas[/bold green]\n")
 
-    # Mostrar lista de completados
-    table = Table(title="Videos descargados", show_lines=True)
-    table.add_column("Video", style="cyan")
-    for v in completed:
-        table.add_row(v)
-    console.print(table)
+    completed_table = jw_downloader.completed_table()
+    console.print(completed_table)
 
 
 if __name__ == "__main__":

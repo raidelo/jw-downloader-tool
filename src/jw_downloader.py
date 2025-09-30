@@ -13,7 +13,7 @@ from rich.progress import (
 from rich.table import Table
 
 from constants import SECTION_MULTIMEDIA_URL, LESSON_NUMBER_RE, SECTIONS, SUB_SECTIONS
-from console import console, Console
+from console import Console
 from download import download_archive
 from errors import InvalidSubSection, InvalidSection, InvalidLesson
 from functions import mkdirs, rm_wrong_chars
@@ -23,7 +23,8 @@ SectionID = int
 LessonID = int
 SubSection = str
 
-LessonInfo =dict[str, str | list[str]]
+LessonInfo = dict[str, str | list[str]]
+
 
 class JWDownloader:
 
@@ -45,14 +46,23 @@ class JWDownloader:
         if not isinstance(max_size, int):
             raise TypeError("Argument `max_file_size` must be an `int`")
 
+        if not isinstance(max_duration, int):
+            raise TypeError("Argument `max_duration` must be an `int`")
+
         self.max_size = max_size
         self.max_duration = max_duration
 
-        self.queue: OrderedDict[SectionID, list[tuple[LessonID, SubSection]]] = OrderedDict()
+        self.queue: OrderedDict[SectionID, list[tuple[LessonID, SubSection]]] = (
+            OrderedDict()
+        )
         for i in range(1, 5):
             self.queue[i] = []
 
-        self.to_download_queue: OrderedDict[SectionID, OrderedDict[LessonID,LessonInfo]] = OrderedDict()
+        self.to_download_queue: OrderedDict[
+            SectionID, OrderedDict[LessonID, LessonInfo]
+        ] = OrderedDict()
+
+        self.completed = []
 
     def add_sections_to_queue(self, sections: list[tuple[SectionID, SubSection]]):
         for section, sub_section in sections:
@@ -83,6 +93,8 @@ class JWDownloader:
                 if not lessons:
                     continue
 
+                self.to_download_queue.update([(section, OrderedDict())])
+
                 task = progress.add_task(
                     f"[bold yellow]Getting information for Section {section}",
                     total=None,
@@ -91,7 +103,6 @@ class JWDownloader:
                 lessons.sort()
 
                 section_info = self.__get_info_of_section(section)
-                new_section_queue = []
 
                 for lesson, sub_section in lessons:
                     lesson_info = section_info[lesson]
@@ -103,16 +114,12 @@ class JWDownloader:
                     elif sub_section in ["extra", "e"]:
                         lesson_info.pop("main")
 
-                    self.to_download_queue[section][lesson] = lesson_info
-
-                    new_section_queue.append(lesson_info)
-
-                self.queue[section] = new_section_queue
+                    self.to_download_queue[section].update([(lesson, lesson_info)])
 
                 progress.remove_task(task)
 
     def start_download(self, console: Console) -> list[str]:
-        completed = []
+        self.completed = []
 
         with Progress(
             SpinnerColumn(),
@@ -121,10 +128,8 @@ class JWDownloader:
             TextColumn("[green]{task.completed}/{task.total}"),
             TimeRemainingColumn(),
             console=console,
-            transient=True,  # limpia al terminar
+            transient=True,
         ) as progress:
-            self.__show_summary()
-
             root_path = mkdirs(Path().joinpath("Disfrute de la vida para siempre!"))
 
             for section, lessons in self.to_download_queue.items():
@@ -208,24 +213,22 @@ class JWDownloader:
 
                         if subsection == "main":
                             file_path = lesson_path.joinpath(filename)
-                        else: # subsection == "extra"
+                        else:  # subsection == "extra"
                             file_path = mkdirs(
                                 lesson_path.joinpath("Descubra algo más")
                             ).joinpath(filename)
 
-                        for bytes_written in download_archive(video_url, file_path):
+                        for bytes_written in download_archive(video_url, size, file_path):
                             progress.update(task, advance=bytes_written)
                             written += bytes_written
                             if written == size:
                                 break
 
                         progress.remove_task(task)
-                        completed.append(video_title)
+                        self.completed.append(video_title)
                         console.print(
-                            f"    [bold green]✔ {video_title}[/bold] descargado[/green]"
+                            f"    [bold][green]✔ {video_title}[/bold] descargado[/green]"
                         )
-
-        return completed
 
     @staticmethod
     def get_best_quality_from(properties: dict, quality: int) -> dict | None:
@@ -243,7 +246,7 @@ class JWDownloader:
     @classmethod
     def __get_info_of_section(
         cls, section: SectionID
-    ) -> OrderedDict[LessonID,LessonInfo]:
+    ) -> OrderedDict[LessonID, LessonInfo]:
         r = session.get(SECTION_MULTIMEDIA_URL % section)
         soup = BeautifulSoup(r.content, "html.parser")
 
@@ -251,7 +254,7 @@ class JWDownloader:
         nav_bar = main_content.find("div", {"id": "tt3"})
         siblings = nav_bar.find_next_siblings()
 
-        section_summary: OrderedDict[LessonID,LessonInfo]  = OrderedDict()
+        section_summary: OrderedDict[LessonID, LessonInfo] = OrderedDict()
         current_lesson_title = ""
         in_subsection_main, in_subsection_extra = False, False
 
@@ -312,24 +315,24 @@ class JWDownloader:
             contains_class = False
         return tag.name == "h3" and contains_class
 
-    def __show_summary(self):
+    def summary_table(self) -> Table:
         table = Table(title="Resumen de descargas")
         table.add_column("Sección", justify="center", style="cyan", no_wrap=True)
         table.add_column("Lecciones", style="magenta")
 
         for sec, lessons in self.queue.items():
             lessons_str = (
-                ", ".join(
-                    map(
-                        lambda lesson: str(
-                            self.__get_lesson_number_from_title(lesson["title"])
-                        ),
-                        lessons,
-                    )
-                )
-                if lessons
-                else "-"
+                ", ".join([str(lesson[0]) for lesson in lessons]) if lessons else "-"
             )
             table.add_row(str(sec), lessons_str)
 
-        console.print(table)
+        return table
+
+    def completed_table(self) -> Table:
+        table = Table(title="Videos descargados", show_lines=True)
+        table.add_column("Video", style="cyan")
+
+        for v in self.completed:
+            table.add_row(v)
+
+        return table

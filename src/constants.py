@@ -18,8 +18,8 @@ SUB_SECTIONS = {
 }
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 LESSON_NUMBER_RE = re.compile(r"^(\d{1,2})\s+.*")
-SIZE_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)[bkmgBKMG]?")
-DURATION_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)[smhSMH]?")
+SIZE_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)([bkmgBKMG])?")
+DURATION_LIMIT_RE = re.compile(r"^(\d{1,}(\.\d{1,})?)([smhSMH])?")
 SECTION_ALL_RE = re.compile(r"^all([|.](a(ll)?|m(ain)?|e(xtra)?))?$")
 DEFAULT_TO_DOWNLOAD = "main"
 AMMOUNT_OF_SECTIONS = 4
