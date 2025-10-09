@@ -14,11 +14,18 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from constants import SECTION_MULTIMEDIA_URL, LESSON_NUMBER_RE, SECTIONS, SUB_SECTIONS
-from console import Console
+from constants import (
+    SECTION_MULTIMEDIA_URL,
+    LESSON_NUMBER_RE,
+    SECTIONS,
+    SUB_SECTIONS,
+    BOOK_TITLE,
+    EXTRA_SUB_SECTION,
+)
+from console import console
 from download import download_archive
 from errors import InvalidSubSection, InvalidSection, InvalidLesson
-from functions import mkdirs, rm_wrong_chars
+from functions import mkdirs, rm_invalid_chars
 from http_client_session import session
 
 SectionID = int
@@ -29,7 +36,6 @@ LessonInfo = dict[str, str | list[str]]
 
 
 class JWDownloader:
-
     def __init__(
         self, quality: str | int = 720, max_size: int = -1, max_duration: int = -1
     ):
@@ -43,13 +49,13 @@ class JWDownloader:
                     "Argument `quality` must be the number alone or end in `p` or `P`\nExamples: 720p, 360P, 240"
                 )
         else:
-            raise TypeError("Argument `quality` must be either an `int` or a `str`")
+            raise TypeError("Type of argument `quality` must be either `int` or `str`")
 
         if not isinstance(max_size, int):
-            raise TypeError("Argument `max_file_size` must be an `int`")
+            raise TypeError("Type of argument `max_size` must be `int`")
 
         if not isinstance(max_duration, int):
-            raise TypeError("Argument `max_duration` must be an `int`")
+            raise TypeError("Type of argument `max_duration` must be `int`")
 
         self.max_size = max_size
         self.max_duration = max_duration
@@ -89,20 +95,17 @@ class JWDownloader:
                     self.queue[section].append((lesson, sub_section))
                     break
 
-    def exec(self, console: Console):
-        with Progress(console=console) as progress:
-            for section, lessons in self.queue.items():
-                if not lessons:
-                    continue
+    def exec(self):
+        for section, lessons in self.queue.items():
+            if not lessons:
+                continue
 
-                self.to_download_queue.update([(section, OrderedDict())])
-
-                task = progress.add_task(
-                    f"[bold yellow]Getting information for Section {section}",
-                    total=None,
-                )
-
+            with console.status(
+                f"[bold yellow]Obteniendo información de la Sección {section}"
+            ):
                 lessons.sort()
+
+                self.to_download_queue[section] = OrderedDict()
 
                 section_info = self.__get_info_of_section(section)
 
@@ -116,29 +119,26 @@ class JWDownloader:
                     elif sub_section in ["extra", "e"]:
                         lesson_info.pop("main")
 
-                    self.to_download_queue[section].update([(lesson, lesson_info)])
+                    self.to_download_queue[section][lesson] = lesson_info
 
-                progress.remove_task(task)
-
-    def start_download(self, console: Console) -> list[str]:
+    def start_download(self) -> list[str]:
         self.completed = []
 
         with Progress(
             SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
+            TextColumn("  [bold blue]{task.description}"),
             BarColumn(bar_width=None),
-            TextColumn("[green]{task.completed}/{task.total}"),
             "[progress.percentage]{task.percentage:>3.1f}%",
-            "•",
+            "\u2022",
             DownloadColumn(),
-            "•",
+            "\u2022",
             TransferSpeedColumn(),
-            "•",
+            "\u2022",
             TimeRemainingColumn(),
             console=console,
             transient=True,
         ) as progress:
-            root_path = mkdirs(Path().joinpath("Disfrute de la vida para siempre!"))
+            root_path = mkdirs(Path().joinpath(BOOK_TITLE))
 
             for section, lessons in self.to_download_queue.items():
                 if not lessons:
@@ -154,10 +154,10 @@ class JWDownloader:
                     console.print(f"  [cyan]Lección {lesson_title}[/cyan]")
 
                     lesson_path = mkdirs(
-                        section_path.joinpath(rm_wrong_chars(lesson_title))
+                        section_path.joinpath(rm_invalid_chars(lesson_title))
                     )
 
-                    videos: list[tuple[str, str]] = []
+                    videos: list[tuple[SubSection, str]] = []
 
                     subsection_main = lesson_info.get("main")
                     if subsection_main:
@@ -172,21 +172,23 @@ class JWDownloader:
                             properties = self.get_video_properties_from_api(api_link)
                         except JSONDecodeError:
                             console.print(
-                                "error: The remote server responded with an invalid response"
+                                "    [bold][red]error:[/red] [white]El servidor devolvió una respuesta inválida[/]"
                             )
                             continue
                         try:
-                            properties = properties["files"]["S"]["MP4"]
+                            properties: dict = properties["files"]["S"]["MP4"]
                         except KeyError:
-                            console.print("error: Couldn't find the link for the video")
+                            console.print(
+                                "    [bold orange]No se pudo encontrar el enlace del vídeo[/bold orange]"
+                            )
                             continue
 
-                        best_quality = self.get_best_quality_from(
+                        best_quality = self.get_best_quality_variant(
                             properties, self.quality
                         )
                         if not best_quality:
                             console.print(
-                                "Couldn't find the desired quality for the video"
+                                "    [bold orange]No se pudo encontrar la calidad deseada para el vídeo[/bold orange]"
                             )
                             continue
 
@@ -196,7 +198,7 @@ class JWDownloader:
 
                         if self.max_size != -1 and size > self.max_size:
                             console.print(
-                                f'[bold gray]Ignorando vídeo: "{video_title}" Su tamaño excede el máximo permitido.[/]'
+                                f'    [bold grey58]\u21a9\ufe0f Ignorando vídeo: [grey70]"{video_title}"[grey58]. Su tamaño excede el máximo permitido.[/]'
                             )
                             continue
                         if (
@@ -204,11 +206,11 @@ class JWDownloader:
                             and best_quality["duration"] > self.max_duration
                         ):
                             console.print(
-                                f'[bold gray]Ignorando vídeo: "{video_title}" Su duración excede el máximo permitido.[/]'
+                                f'    [bold grey58]\u21a9\ufe0f Ignorando vídeo: [grey70]"{video_title}"[grey58]. Su duración excede el máximo permitido.[/]'
                             )
                             continue
 
-                        filename = rm_wrong_chars(
+                        filename = rm_invalid_chars(
                             video_title
                             + "".join(Path(video_url.split("?")[0]).suffixes)
                         )
@@ -217,14 +219,14 @@ class JWDownloader:
                             f"Descargando: {video_title}", total=size
                         )
 
-                        written = 0
-
                         if subsection == "main":
                             file_path = lesson_path.joinpath(filename)
                         else:  # subsection == "extra"
                             file_path = mkdirs(
-                                lesson_path.joinpath("Descubra algo más")
+                                lesson_path.joinpath(EXTRA_SUB_SECTION)
                             ).joinpath(filename)
+
+                        written = 0
 
                         for bytes_written in download_archive(
                             video_url, size, file_path
@@ -237,11 +239,11 @@ class JWDownloader:
                         progress.remove_task(task)
                         self.completed.append(video_title)
                         console.print(
-                            f"    [bold][green]✔ {video_title}[/bold] descargado[/green]"
+                            f"    [bold green]\u2714  {video_title}[/bold green]"
                         )
 
     @staticmethod
-    def get_best_quality_from(properties: dict, quality: int) -> dict | None:
+    def get_best_quality_variant(properties: dict, quality: int) -> dict | None:
         best_match, index_of_best_match = 0, None
         for variant_pos, variant in enumerate(properties):
             curr_quality = int(variant["label"].strip("pP "))
@@ -328,7 +330,7 @@ class JWDownloader:
     def summary_table(self) -> Table:
         table = Table(title="Resumen de descargas")
         table.add_column("Sección", justify="center", style="cyan", no_wrap=True)
-        table.add_column("Lecciones", style="magenta")
+        table.add_column("Lecciones", justify="center", style="magenta")
 
         for sec, lessons in self.queue.items():
             lessons_str = (
@@ -338,7 +340,10 @@ class JWDownloader:
 
         return table
 
-    def completed_table(self) -> Table:
+    def completed_table(self) -> Table | None:
+        if not self.completed:
+            return
+
         table = Table(title="Videos descargados", show_lines=True)
         table.add_column("Video", style="cyan")
 

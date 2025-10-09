@@ -7,7 +7,7 @@ def mkdirs(path: Path) -> Path:
     return path
 
 
-def rm_wrong_chars(s: str) -> str:
+def rm_invalid_chars(s: str) -> str:
     r"""Remves following chars from the string:
     < (less than)
     > (greater than)
