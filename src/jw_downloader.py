@@ -96,13 +96,20 @@ class JWDownloader:
                     break
 
     def exec(self):
-        for section, lessons in self.queue.items():
-            if not lessons:
-                continue
+        with Progress(
+            "{task.description}",
+            SpinnerColumn("bouncingBall"),
+            transient=True,
+            console=console,
+        ) as progress:
+            for section, lessons in self.queue.items():
+                if not lessons:
+                    continue
 
-            with console.status(
-                f"[bold yellow]Obteniendo información de la Sección {section}"
-            ):
+                task = progress.add_task(
+                    f"[bold yellow]Obteniendo información de la Sección {section}"
+                )
+
                 lessons.sort()
 
                 self.to_download_queue[section] = OrderedDict()
@@ -120,6 +127,8 @@ class JWDownloader:
                         lesson_info.pop("main")
 
                     self.to_download_queue[section][lesson] = lesson_info
+
+                progress.remove_task(task)
 
     def start_download(self) -> list[str]:
         self.completed = []
