@@ -5,6 +5,7 @@ import time
 
 from constants import SECTIONS
 
+
 console = Console()
 
 

@@ -1,69 +1,29 @@
-from signal import signal, SIGINT, SIGTERM
-
-from cli import parse_args
-from constants import SECTION_ALL_RE, DEFAULT_TO_DOWNLOAD, AMMOUNT_OF_SECTIONS
+from cli import argument_parser
 from console import console
-from functions import parse_size_limit, parse_duration_limit
-from jw_downloader import JWDownloader
-from parsing import parse_spec_to_ranges, expand_ranges
-from signal_handler import signal_handler
+from downloader import JWDownloader
+from subcmd_handling.lesson import handler_lesson_subcmd
+from subcmd_handling.section import handler_section_subcmd
 
 
-signal(SIGINT, signal_handler)
-signal(SIGTERM, signal_handler)
-
-
-def main():
-    parser, args = parse_args()
-
-    if args.size_limit != -1:
-        try:
-            args.size_limit = parse_size_limit(args.size_limit)
-        except ValueError:
-            print(f"error: Incorrect format for size limit: {args.size_limit}")
-            exit(1)
-    if args.duration_limit != -1:
-        try:
-            args.duration_limit = parse_duration_limit(args.duration_limit)
-        except ValueError:
-            print(f"error: Incorrect format for duration limit: {args.duration_limit}")
-            exit(1)
+def main() -> None:
+    args = argument_parser().parse_args()
 
     jw_downloader = JWDownloader(
-        quality=args.quality, max_size=args.size_limit, max_duration=args.duration_limit
+        quality=args.quality,
+        max_size=args.size_limit,
+        max_duration=args.duration_limit,
     )
 
     if hasattr(args, "section"):
-        try:
-            match = SECTION_ALL_RE.match(args.section)
-            if match:
-                sub_section = match.group(2) or DEFAULT_TO_DOWNLOAD
-                sections = [
-                    (section, sub_section)
-                    for section in range(1, AMMOUNT_OF_SECTIONS + 1)
-                ]
-            else:
-                sections = list(
-                    expand_ranges(
-                        parse_spec_to_ranges(args.section), min_value=1, max_value=4
-                    )
-                )
-            jw_downloader.add_sections_to_queue(sections)
-        except ValueError:
-            parser.print_help()
-            exit(1)
+        handler_section_subcmd(args=args, jw_downloader=jw_downloader)
     elif hasattr(args, "lesson"):
-        lessons = list(
-            expand_ranges(parse_spec_to_ranges(args.lesson), min_value=0, max_value=60)
-        )
-        jw_downloader.add_lessons_to_queue(lessons)
+        handler_lesson_subcmd(args=args, jw_downloader=jw_downloader)
     else:
-        parser.print_help()
-        exit(1)
+        raise ValueError("unreachable")  # first subcommand is required
 
     console.print("\n[bold cyan]JW-Downloader - CLI[/bold cyan]\n", justify="center")
 
-    jw_downloader.exec(console)
+    jw_downloader.exec(console=console)
 
     summary_table = jw_downloader.summary_table()
     console.print(summary_table)
@@ -77,4 +37,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[bold red]Interruption Received. Exitting ...[/]")
+        exit(1)

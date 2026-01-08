@@ -10,8 +10,6 @@ from rich.table import Table
 import time
 import random
 
-from constants import SECTIONS
-
 console = Console()
 
 
