@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
+from argparse import ArgumentParser
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Generator
-import argparse
-import re
+from re import compile
+from typing import Generator, List, Optional, Tuple
 
 from types_ import VideoGroup
-
 
 INVALID_TOKEN = "Token inválido: {token!r}"
 ERR_INVALID_RANGE = "Rango inválido {start_n}-{end_n}: {start_n}>{end_n}"
@@ -17,7 +15,7 @@ ERR_NON_MATCHING_SUFFIXES = "Rango inválido: los sufijos no coinciden: {suffix}
 
 DEFAULT_SUFFIX = VideoGroup.PRIMARY
 
-TOKEN_RE = re.compile(
+TOKEN_RE = compile(
     r"^(\d+)([{suffixes}])?$".format(suffixes="".join([i.value for i in VideoGroup]))
 )
 
@@ -51,28 +49,28 @@ def parse_spec_to_ranges(
     ranges: List[Range] = []
     for p in parts:
         if "-" in p:
-            l, r = p.split("-", 1)
-            l, r = l.strip(), r.strip()
+            l_part, r_part = p.split("-", 1)
+            l_part, r_part = l_part.strip(), r_part.strip()
 
-            if l == "" and not min_value and r == "" and not max_value:
+            if l_part == "" and not min_value and r_part == "" and not max_value:
                 raise ValueError(ERR_OPEN_RANGE)
 
-            if l == "":
+            if l_part == "":
                 if not min_value:
                     raise ValueError(
                         ERR_OPEN_WO_DELIM.format(side="izquierdo", field="min_value")
                     )
                 left = TokenPair[OptSuffix](min_value, None)
             else:
-                left = parse_token(l)
-            if r == "":
+                left = parse_token(l_part)
+            if r_part == "":
                 if not max_value:
                     raise ValueError(
                         ERR_OPEN_WO_DELIM.format(side="derecho", field="max_value")
                     )
                 right = TokenPair[OptSuffix](max_value, None)
             else:
-                right = parse_token(r)
+                right = parse_token(r_part)
 
             if left.n > right.n:
                 raise ValueError(
@@ -97,7 +95,7 @@ def parse_spec_to_ranges(
     return ranges
 
 
-def expand_ranges(ranges: List[Range]) -> Generator[TokenPair, None, None]:
+def expand_ranges(ranges: List[Range]) -> Generator[TokenPair[VideoGroup], None, None]:
     for start, end, suffix in ranges:
         if start > end:
             raise ValueError(ERR_INVALID_RANGE.format(start_n=start, end_n=end))
@@ -109,11 +107,9 @@ def expand_ranges(ranges: List[Range]) -> Generator[TokenPair, None, None]:
 # ----------------------------
 # Main CLI
 # ----------------------------
-def main():
-    parser = argparse.ArgumentParser(
-        description="Parseador estilo nmap con sufijos [a,m,e]."
-    )
-    parser.add_argument("spec", help='Ejemplo: "5a,7-9e,15,21m-"')
+def main() -> None:
+    parser = ArgumentParser(description="Parseador estilo nmap con sufijos [p,s,a].")
+    parser.add_argument("spec", help='Ejemplo: "5a,7-9s,15,21p-"')
     parser.add_argument(
         "--min",
         type=int,

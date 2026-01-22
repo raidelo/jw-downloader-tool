@@ -1,1 +1,1 @@
-
+AUTO_RESOLVE = True

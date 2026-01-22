@@ -1,3 +1,4 @@
+from pathlib import Path
 from re import compile
 from typing import Optional
 
@@ -5,15 +6,15 @@ from bs4 import BeautifulSoup, Tag
 from bs4.element import PageElement
 from requests import Response
 
-from utils import custom_get
+from cli import DesiredProps
+from constants import FROM_LOCAL
 from types_ import JWLessonMedia, JWSectionMediaSummary, JWVideo, LessonID, SectionID
-
+from utils import custom_get
 
 VALID_A_TAG_TEXT = "Descargar este video"
 VALID_H3_TAG_CLASS = "du-color--coolGray-500"
 
 LESSON_NUMBER_RE = compile(r"^(\d{1,2})\s+.*")
-SECTION_ALL_RE = compile(r"^all([|.](a(ll)?|m(ain)?|e(xtra)?))?$")
 
 SECTION_MULTIMEDIA_URL = "https://www.jw.org/es/biblioteca/libros/disfrute-vida-para-siempre/seccion-%s/multimedia/"
 
@@ -34,26 +35,14 @@ class JWDownloader:
     and maximum duration constraints.
     """
 
-    def __init__(
-        self,
-        quality: str | int = DEFAULT_QUALITY,
-        max_size: Optional[int] = DEFAULT_MAX_SIZE,
-        max_duration: Optional[int] = DEFAULT_MAX_DURATION,
-    ):
+    def __init__(self, desired_props: DesiredProps):
         """
         Initializes a `JWDownloader` instance with download constraints.
 
         Args:
-            quality: Desired video quality. May be a string or a numeric
-                identifier, depending on the platform's conventions.
-            max_size: Maximum allowed video size in bytes. If `None`,
-                no size limit is enforced.
-            max_duration: Maximum allowed video duration in seconds.
-                If `None`, no duration limit is enforced.
+            desired_props: Desired video properties.
         """
-        self.quality = quality
-        self.max_size = max_size
-        self.max_duration = max_duration
+        self.des_props = desired_props
 
     @classmethod
     def _get_sect_raw(cls, section: SectionID) -> Response:
@@ -174,7 +163,12 @@ class JWDownloader:
             A parsed `JWSectionMediaSummary` instance containing the media
             data for the section.
         """
-        content = cls._get_sect_raw(section=section).iter_content(chunk_size=4096)
+        if FROM_LOCAL:
+            filename = f"s{section}.html"
+            with Path(__file__).with_name(filename).open("rb") as f:
+                content = f.read()
+        else:
+            content = cls._get_sect_raw(section=section).iter_content(chunk_size=4096)
 
         return cls.parse_sect_data_from_html(
             section=section,

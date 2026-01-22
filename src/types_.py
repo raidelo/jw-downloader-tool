@@ -1,9 +1,8 @@
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Self, TypedDict
 
 from utils import custom_get
-
 
 type SectionID = int
 type LessonID = int
@@ -28,7 +27,7 @@ class JWVideoPropertiesJSON(TypedDict):
     enumerated and documented.
     """
 
-    pass
+    pass  # TODO: implement
 
 
 @dataclass
@@ -46,7 +45,7 @@ class JWVideoProperties:
         # Concrete keys and types will be added once the API is fully enumerated.
     """
 
-    pass
+    pass  # TODO: implement
 
     @classmethod
     def from_json(cls, json_data: JWVideoPropertiesJSON) -> Self:
@@ -71,7 +70,8 @@ class JWVideoProperties:
             `JWVideoPropertiesJSON`. Any missing or invalid fields
             may raise an exception depending on the parsing logic.
         """
-        pass
+
+        pass  # TODO: implement
 
 
 @dataclass

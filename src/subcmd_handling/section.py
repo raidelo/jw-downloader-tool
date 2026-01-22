@@ -1,19 +1,31 @@
 from argparse import Namespace
 
-from constants import AMOUNT_OF_SECTIONS, DEFAULT_MODE
+from cli import DesiredProps
 from downloader import JWDownloader
-from parsing import expand_ranges, parse_spec_to_ranges
+from parsing import DEFAULT_SUFFIX, expand_ranges, parse_spec_to_ranges
+from subcmd_handling import AUTO_RESOLVE
+from subcmd_handling.downloading import download_lesson
+
+FIRST_SECTION = 1
+LAST_SECTION = 4
 
 
-def handler_section_subcmd(args: Namespace, jw_downloader: JWDownloader) -> None:
-    match = SECTION_ALL_RE.match(args.section)
-    if match:
-        sub_section = match.group(2) or DEFAULT_MODE
-        sections = [
-            (section, sub_section) for section in range(1, AMOUNT_OF_SECTIONS + 1)
-        ]
-    else:
-        sections = list(
-            expand_ranges(parse_spec_to_ranges(args.section), min_value=1, max_value=4)
+def handler_section_subcmd(args: Namespace, desired_props: DesiredProps) -> None:
+    ranges = parse_spec_to_ranges(
+        spec=args.section,
+        min_value=FIRST_SECTION,
+        max_value=LAST_SECTION,
+        default_suffix=DEFAULT_SUFFIX,
+    )
+
+    for section in expand_ranges(ranges=ranges):
+        section_summary = JWDownloader.get_sect_data_parsed(
+            section=section.n, resolve=AUTO_RESOLVE
         )
-    jw_downloader.add_sections_to_queue(sections)
+
+        for lesson in section_summary.lessons:
+            download_lesson(
+                lesson=lesson,
+                subsection=section.suffix,
+                desired_props=desired_props,
+            )
