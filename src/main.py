@@ -1,20 +1,20 @@
-from signal import signal, SIGINT, SIGTERM
+from signal import SIGINT, SIGTERM, signal
 
-from cli import parse_args
-from constants import ALL_SECTIONS_RE, DEFAULT_TO_DOWNLOAD, AMMOUNT_OF_SECTIONS
+from cli import argument_parser
 from console import console
-from functions import parse_size_limit, parse_duration_limit
+from constants import ALL_SECTIONS_RE, AMMOUNT_OF_SECTIONS, DEFAULT_TO_DOWNLOAD
+from functions import parse_duration_limit, parse_size_limit
 from jw_downloader import JWDownloader
-from parsing import parse_spec_to_ranges, expand_ranges
+from parsing import expand_ranges, parse_spec_to_ranges
 from signal_handler import signal_handler
-
 
 signal(SIGINT, signal_handler)
 signal(SIGTERM, signal_handler)
 
 
-def main():
-    parser, args = parse_args()
+def main() -> int:
+    parser = argument_parser()
+    args = parser.parse_args()
 
     if args.size_limit != -1:
         try:
@@ -23,7 +23,7 @@ def main():
             console.print(
                 f"[bold][red]error:[/red] [white]Formato incorrecto para el límite de tamaño: {args.size_limit}[/]"
             )
-            exit(1)
+            return 1
     if args.duration_limit != -1:
         try:
             args.duration_limit = parse_duration_limit(args.duration_limit)
@@ -31,10 +31,12 @@ def main():
             console.print(
                 f"[bold][red]error:[/red] [white]Formato incorrecto para el límite de duración: {args.duration_limit}[/]"
             )
-            exit(1)
+            return 1
 
     jw_downloader = JWDownloader(
-        quality=args.quality, max_size=args.size_limit, max_duration=args.duration_limit
+        quality=args.quality,
+        max_size=args.size_limit,
+        max_duration=args.duration_limit,
     )
 
     if hasattr(args, "section"):
@@ -53,7 +55,7 @@ def main():
                 )
             except ValueError as e:
                 console.print(f"[bold][red]error:[/red] [white]{''.join(e.args)}[/]")
-                exit(1)
+                return 1
         jw_downloader.add_sections_to_queue(sections)
     elif hasattr(args, "lesson"):
         try:
@@ -64,11 +66,11 @@ def main():
             )
         except ValueError as e:
             console.print(f"[bold][red]error:[/red] [white]{''.join(e.args)}[/]")
-            exit(1)
+            return 1
         jw_downloader.add_lessons_to_queue(lessons)
     else:
         parser.print_help()
-        exit(1)
+        return 1
 
     console.print("\n[bold cyan]JW-Downloader - CLI[/bold cyan]\n", justify="center")
 
@@ -85,6 +87,8 @@ def main():
     if completed_table:
         console.print(completed_table)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    exit(main())

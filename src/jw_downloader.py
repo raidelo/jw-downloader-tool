@@ -14,17 +14,17 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from console import console
 from constants import (
-    SECTION_MULTIMEDIA_URL,
-    LESSON_NUMBER_RE,
-    SECTIONS,
-    SUB_SECTIONS,
     BOOK_TITLE,
     EXTRA_SUB_SECTION,
+    LESSON_NUMBER_RE,
+    SECTION_MULTIMEDIA_URL,
+    SECTIONS,
+    SUB_SECTIONS,
 )
-from console import console
 from download import download_archive
-from errors import InvalidSubSection, InvalidSection, InvalidLesson
+from errors import InvalidLesson, InvalidSection, InvalidSubSection
 from functions import mkdirs, rm_invalid_chars
 from http_client_session import session
 

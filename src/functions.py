@@ -1,5 +1,6 @@
-from constants import SIZE_LIMIT_RE, DURATION_LIMIT_RE
 from pathlib import Path
+
+from constants import DURATION_LIMIT_RE, SIZE_LIMIT_RE
 
 
 def mkdirs(path: Path) -> Path:

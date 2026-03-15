@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 
 
-def parse_args():
+def argument_parser() -> ArgumentParser:
     parser = ArgumentParser()
     parser.add_argument("--quality", default="720", dest="quality")
     parser.add_argument("-l", "--size-limit", default=-1, dest="size_limit")
@@ -14,4 +14,4 @@ def parse_args():
     subcommand_lesson = subcmd.add_parser("lesson")
     subcommand_lesson.add_argument("lesson")
 
-    return parser, parser.parse_args()
+    return parser

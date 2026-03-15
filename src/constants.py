@@ -1,6 +1,5 @@
 import re
 
-
 SECTION_MULTIMEDIA_URL = "https://www.jw.org/es/biblioteca/libros/disfrute-vida-para-siempre/seccion-%s/multimedia/"
 SECTIONS = {
     1: (0, 12),

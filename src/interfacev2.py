@@ -1,14 +1,15 @@
+import random
+import time
+
 from rich.console import Console
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    BarColumn,
     TextColumn,
     TimeRemainingColumn,
 )
 from rich.table import Table
-import time
-import random
 
 from constants import SECTIONS
 

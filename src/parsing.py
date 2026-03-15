@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-from typing import List, Tuple, Optional, Generator
 import argparse
 import re
+from typing import Generator, List, Optional, Tuple
 
 # ----------------------------
 # Tipos
