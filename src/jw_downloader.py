@@ -25,8 +25,8 @@ from constants import (
 )
 from download import download_archive
 from errors import InvalidLesson, InvalidSection, InvalidSubSection
-from functions import mkdirs, rm_invalid_chars
 from http_client_session import session
+from utils import mkdirs, rm_invalid_chars
 
 SectionID = int
 LessonID = int
@@ -37,7 +37,10 @@ LessonInfo = dict[str, str | list[str]]
 
 class JWDownloader:
     def __init__(
-        self, quality: str | int = 720, max_size: int = -1, max_duration: int = -1
+        self,
+        quality: str | int = 720,
+        size_limit: int | None = None,
+        duration_limit: int | None = None,
     ):
         if isinstance(quality, int):
             self.quality = quality
@@ -51,14 +54,14 @@ class JWDownloader:
         else:
             raise TypeError("Type of argument `quality` must be either `int` or `str`")
 
-        if not isinstance(max_size, int):
+        if not isinstance(size_limit, int):
             raise TypeError("Type of argument `max_size` must be `int`")
 
-        if not isinstance(max_duration, int):
+        if not isinstance(duration_limit, int):
             raise TypeError("Type of argument `max_duration` must be `int`")
 
-        self.max_size = max_size
-        self.max_duration = max_duration
+        self.size_limit = size_limit
+        self.duration_limit = duration_limit
 
         self.queue: OrderedDict[SectionID, list[tuple[LessonID, SubSection]]] = (
             OrderedDict()
@@ -66,9 +69,9 @@ class JWDownloader:
         for i in range(1, 5):
             self.queue[i] = []
 
-        self.to_download_queue: OrderedDict[
-            SectionID, OrderedDict[LessonID, LessonInfo]
-        ] = OrderedDict()
+        self.queue_to_dl: OrderedDict[SectionID, OrderedDict[LessonID, LessonInfo]] = (
+            OrderedDict()
+        )
 
         self.completed = []
 
@@ -112,7 +115,7 @@ class JWDownloader:
 
                 lessons.sort()
 
-                self.to_download_queue[section] = OrderedDict()
+                self.queue_to_dl[section] = OrderedDict()
 
                 section_info = self.__get_info_of_section(section)
 
@@ -126,7 +129,7 @@ class JWDownloader:
                     elif sub_section in ["extra", "e"]:
                         lesson_info.pop("main")
 
-                    self.to_download_queue[section][lesson] = lesson_info
+                    self.queue_to_dl[section][lesson] = lesson_info
 
                 progress.remove_task(task)
 
@@ -149,7 +152,7 @@ class JWDownloader:
         ) as progress:
             root_path = mkdirs(Path().joinpath(BOOK_TITLE))
 
-            for section, lessons in self.to_download_queue.items():
+            for section, lessons in self.queue_to_dl.items():
                 if not lessons:
                     continue
 
@@ -205,14 +208,14 @@ class JWDownloader:
                         video_title = best_quality["title"]
                         video_url = best_quality["file"]["url"]
 
-                        if self.max_size != -1 and size > self.max_size:
+                        if self.size_limit is not None and size > self.size_limit:
                             console.print(
                                 f'    [bold grey58]\u21a9\ufe0f Ignorando vídeo: [grey70]"{video_title}"[grey58]. Su tamaño excede el máximo permitido.[/]'
                             )
                             continue
                         if (
-                            self.max_duration != -1
-                            and best_quality["duration"] > self.max_duration
+                            self.duration_limit is not None
+                            and best_quality["duration"] > self.duration_limit
                         ):
                             console.print(
                                 f'    [bold grey58]\u21a9\ufe0f Ignorando vídeo: [grey70]"{video_title}"[grey58]. Su duración excede el máximo permitido.[/]'

@@ -3,40 +3,40 @@ from signal import SIGINT, SIGTERM, signal
 from cli import argument_parser
 from console import console
 from constants import ALL_SECTIONS_RE, AMMOUNT_OF_SECTIONS, DEFAULT_TO_DOWNLOAD
-from functions import parse_duration_limit, parse_size_limit
 from jw_downloader import JWDownloader
 from parsing import expand_ranges, parse_spec_to_ranges
 from signal_handler import signal_handler
+from utils import parse_duration_limit, parse_size_limit
 
 signal(SIGINT, signal_handler)
 signal(SIGTERM, signal_handler)
+
+INVALID_FORMAT = (
+    "[bold][red]error:[/red] [white]Formato incorrecto para el límite de {}: {}[/]"
+)
 
 
 def main() -> int:
     parser = argument_parser()
     args = parser.parse_args()
 
-    if args.size_limit != -1:
+    if args.size_limit is not None:
         try:
             args.size_limit = parse_size_limit(args.size_limit)
         except ValueError:
-            console.print(
-                f"[bold][red]error:[/red] [white]Formato incorrecto para el límite de tamaño: {args.size_limit}[/]"
-            )
+            console.print(INVALID_FORMAT.format("tamaño", args.size_limit))
             return 1
-    if args.duration_limit != -1:
+    if args.duration_limit is not None:
         try:
             args.duration_limit = parse_duration_limit(args.duration_limit)
         except ValueError:
-            console.print(
-                f"[bold][red]error:[/red] [white]Formato incorrecto para el límite de duración: {args.duration_limit}[/]"
-            )
+            console.print(INVALID_FORMAT.format("duración", args.duration_limit))
             return 1
 
     jw_downloader = JWDownloader(
         quality=args.quality,
-        max_size=args.size_limit,
-        max_duration=args.duration_limit,
+        size_limit=args.size_limit,
+        duration_limit=args.duration_limit,
     )
 
     if hasattr(args, "section"):
